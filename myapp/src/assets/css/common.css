@@ -5,4 +5,6 @@ body{
 
 :root{
   --primary-color: #ff9584;
+  /* --van-tabbar-item-active-color: #ff9584 !important; */
+  /* --van-tabbar-item-font-size: 20px !important; */
 }
