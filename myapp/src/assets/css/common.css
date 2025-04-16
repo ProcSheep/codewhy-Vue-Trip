@@ -4,7 +4,22 @@ body{
 }
 
 :root{
+  /* tabbar字体色 */
   --primary-color: #ff9584;
+  /* 搜索框左侧icon颜色 */
+  --van-search-left-icon-color: #ff9527 !important;
+  /* Tab底边线颜色 */
+  --van-tabs-bottom-bar-color: #ff9527 !important;
+
   /* --van-tabbar-item-active-color: #ff9584 !important; */
   /* --van-tabbar-item-font-size: 20px !important; */
+}
+
+.top-page{
+  position: relative;
+  z-index: 10;
+  height: 100vh;
+  background-color: #fff;
+  /* 防止页面y滚动(100vh挡不住滚动条) */
+  overflow-y: auto; 
 }
