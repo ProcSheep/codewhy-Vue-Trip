@@ -40,6 +40,7 @@ const itemClick = (index,item)=>{
   bottom: 0;
   display: flex;
   border-top: 1px solid orange;
+  background-color: white;
 
   .tabbarItem {
     display: flex;

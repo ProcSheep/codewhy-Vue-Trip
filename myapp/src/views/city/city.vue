@@ -2,7 +2,7 @@
   <!-- <div class="city top-page"> -->
   <div class="city">
     <div class="top">
-      <van-search v-model="value" placeholder="城市/区域/位置" show-action @cancel="onCancel" />
+      <van-search v-model="searchValue" placeholder="城市/区域/位置" show-action @cancel="onCancel" />
       <!-- tabActive绑定点击索引(0开始) -->
       <van-tabs v-model:active="tabActive">
         <template v-for="(value,key,index) in allCities" :key="key">
@@ -28,6 +28,7 @@ import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
 
 const tabActive = ref('')
+const searchValue = ref('') 
 
 const router = useRouter()
 const onCancel = () => {

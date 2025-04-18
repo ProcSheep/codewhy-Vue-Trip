@@ -10,6 +10,8 @@ body{
   --van-search-left-icon-color: #ff9527 !important;
   /* Tab底边线颜色 */
   --van-tabs-bottom-bar-color: #ff9527 !important;
+  /* 开始搜索按钮颜色渐变 */
+  --theme-linear-gradient: linear-gradient(90deg, #fa8c1d, #fcaf3f);
 
   /* --van-tabbar-item-active-color: #ff9584 !important; */
   /* --van-tabbar-item-font-size: 20px !important; */

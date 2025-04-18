@@ -148,6 +148,21 @@
     export default useSearchStore
   ```
   > 别的vue想要用这个store,直接import引入这个useSearchStore即可
+### hooks与utils的分工
+- hooks和utils看似相似的,都是封装工具函数的,但是双方职能完全不同
+- ==**hooks**== 
+  Vue 3 里复用有状态逻辑的方式，它可以使用 Vue 的响应式系统，==如 ref、reactive、watch 等。hooks 通常和组件的状态、生命周期等相关。
+- ==适用场景==
+  状态管理：封装需要响应式数据的逻辑，比如表单状态管理。
+  生命周期钩子：封装和组件生命周期相关的逻辑，例如在组件挂载时获取数据。
+  事件监听：封装事件监听逻辑，例如监听窗口大小变化。
+- ==**utils**==
+  utils 文件夹通常用于存放通用的、和 Vue 响应式系统以及组件逻辑无关的工具函数。这些函数可以在项目的任何地方使用，不依赖于 Vue 的特定功能。
+- ==适用场景==
+  数据处理：对数据进行格式化、转换、验证等操作。
+  日期和时间处理：如日期格式化、计算时间差等。
+  字符串处理：字符串的截取、替换、拼接等。
+  数学计算：实现一些通用的数学公式。
 ## 页面搭建
 ### Tabbar搭建
 - 底部tabbar搭建,点击对应图标后,图标变色并跳转到对应的文件
@@ -244,6 +259,23 @@
     <style scoped>
 
     </style>
+  ```
+### 页面内容防遮挡(*)
+- Tabbar菜单栏fixed固定在底部,当页面内容超出100vh时,Tabbar页面会遮挡一部分页面内容,如下操作即可
+  ```html
+    <div>
+      <div class="page-content">
+        <RouterView></RouterView>
+      </div>
+      <TabBar v-if="!route.meta.hideTabbar"></TabBar>
+    </div>
+  ```
+  ```css
+    /* 防止Tabbar遮挡页面 */
+    .page-content{
+      /* Tabbar固定高度55px */
+      margin-bottom: 55px;
+    }
   ```
 ### 补充less知识点(*)
 - tabbar代码中的less
@@ -675,4 +707,299 @@
   ```
 ### 阶段总结
 - city页面本身不难,组件节省了很多工夫,但是数据比较复杂,所以需要认真处理好数据的循环
+### 热门城市
+- city-group.vue
+- ==1.热门城市和处理城市数据一样,十分简单==
+  ```html
+    <!-- :index-list映射索引列表 -->
+    <van-index-bar :index-list="indexList">
+      <!-- 热门 -->
+      <van-index-anchor index="热门" />
+      <div class="list">
+        <template v-for="(item, index) in groupData.hotCities" :key="index">
+          <!-- <van-cell :title="item.cityName" /> -->
+          <div class="hotCitiesItem" @click="selectCity(item)">{{ item.cityName }}</div>
+        </template>
+      </div>
+      <!-- 索引表 -->
+      <template v-for="(group, index) in groupData.cities" :key="index">
+        <van-index-anchor :index="group.group" />
+        <template v-for="(city, indey) in group.cities" :key="indey">
+          <van-cell :title="city.cityName" @click="selectCity(city)" />
+        </template>      
+      </template>
+    </van-index-bar>
+  ```
+  > 在基础城市上面再做一个for循环,然后配置好样式
+- ==2.右侧索引的处理==
+- IndexBar的索引是依据顺序自动配置的,依据文档,可以通过van-index-bar的index-list配置索引有谁,这里动态配置,给热门数据单独配置`*`,其余的由cities.group动态获取,减少一些不必要的首字母(例如,没有城市的拼音首字母开头是V)
+  ```js
+    // 获取城市的分组信息
+    const indexList = computed(() => {
+      const list = props.groupData.cities.map(item => item.group)
+      // 额外给热门加一个索引*
+      list.unshift('*')
+      return list
+    })
+  ```
+### 主页热门城市回显(*)
+- 主页面需要城市数据的组件可能比较多,单纯传递数据比较麻烦,可以使用事件总线,统一发出,谁用谁监听,==不过最简单的,还是依据citystore统一处理数据==
+- city.store
+  ```js
+    state: ()=>({
+      allCities:{},
+    + currentCity: {
+        cityName: '北京'
+      }
+    })
+  ```
+- 在城市页面获取到城市数据,然后放入citystore中
+- 上面html代码中,已经配置了selectCity事件监听
+  ```js
+    // 监听城市点击
+    const selectCity = (city) => {
+      // -> city store
+      cityStore.currentCity = city
+      // 返回上一级
+      router.back()
+    }
+  ```
+  > 这里selectCity事件监听一个监听自己的div,一个监听vant组件van-cell,是否能监听组件取决于组件内部对于监听事件的设置,后面会讲
+- home页面回显城市名 home-search-box.vue
+  ```js
+    const cityStore = usecityStore()
+    const { currentCity } = storeToRefs(cityStore) // 现在的城市
+  ```
+  > 把currentCity放到对应html位置
+  
+### 日期处理dayjs(*)
+- ==有关日期的处理,推荐用dayjs库即可==
+- 下载: `npm i dayjs`
+- 写好酒店选日期的html和css样式,略(home-search-box.vue)
+- 计算开始时间,结束时间,stay时间
+  ```js
+    // 日期自动格式化
+    const nowDate = new Date()
+    // 新的天数这样加,不要直接new Date()+1,防止出现'7月32日'
+    const newDate = new Date()
+    newDate.setDate(nowDate.getDate() + 1) // 不返回新的值,直接改原对象
+    // 开始日期,结束日期,停留日期
+    const startDate = ref(formatMonthDay(new Date()))
+    const endDate = ref(formatMonthDay(newDate))
+    const stayCount = ref(1)
+    stayCount.value = getDiffDays(nowDate, newDate) // 可有可无,默认就是1天
+  ```
+- ==dayjs计算日期封装进utils==
+  ```js
+    import dayjs from 'dayjs'
+    // 格式化月日
+    export function formatMonthDay(date){
+      return dayjs(date).format('MM月DD日')
+    }
+    // 计算日期差值(天)
+    export function getDiffDays(startDate,endDate){
+      return dayjs(endDate).diff(startDate,'day')
+    }
+  ```
+### 日历组件
+- 简单使用日历组件,简单修改css样式(less变量)和样式配置,略
+- 复用dayjs日期差值计算的函数
+  ```html
+    <!-- 日历 -->
+    <van-calendar class="calendar" v-model:show="isCalendarShow" type="range" @confirm="onConfirm" color="#ff9527" />
+  ```
+  ```js
+    // 日历
+    const isCalendarShow = ref(false)
+    // 组件自带,确定按钮事件处理函数
+    const onConfirm = (value) => { // 日历区间默认参数value->数组[开始,结束]
+      // 格式化入住,离开事件
+      startDate.value = formatMonthDay(value[0])
+      endDate.value = formatMonthDay(value[1])
+      // 计算天数差值
+      stayCount.value = getDiffDays(value[0], value[1])
+      // 关闭日历
+      isCalendarShow.value = false
+    }
+  ```
+### 城市热门数据
+- 城市热门数据也是service网络请求,store保存数据,然后vue直接引入,前面网络架构学过了,完全一致
+- 看文件目录即可,代码略
 
+### 行高行距问题(*)
+- normalize.css中把html的line-height设置为1.15,在页面元素没有设置行高时,默认font-size*1.15就是它的行高; 行高分配是,行高减去字体高度,然后在字体上下平分,实现纵向居中,浏览器不会显示带小数px间距,所以有时候,比如剩余1.8px,可能上边1px,下面0.8px(小数省略了),最终只有上面1px,下面0px;
+- 在页面放大缩小时,浏览器重新记录px,有时候缩放后,剩余px可能正好整除,所以显示又正常了(居中)  
+- ==解决: 可以重置reset.css,不建议设置为1(紧紧包裹文字,不美观),可以设置为1.2(浏览器通用)==
+
+### 位置信息问题
+- 可以使用腾讯和高德的SDK,使用它们的服务器处理你的经纬度,返回对应的城市位置等  
+### 搜索跳转与query传参
+- 搜索按钮,传递当前城市的参数
+- 搜索页面的创建和路由,略
+  ```html
+    <!-- 开始搜索 -->
+    <div class="section search-btn" @click="searchBtn">
+      <div class="btn">开始搜索</div>
+    </div>
+  ```
+  ```js
+    // 搜素功能
+    const searchBtn = () => {
+      router.push({
+        path:'/search',
+        query: { // ref数据传值要.value
+          startDate: startDate.value,
+          endDate: endDate.value,
+          currentCity: currentCity.value.cityName
+        }
+      })
+    }
+  ```
+### 分类管理搭建
+- 分类组件的数据请求依据'网络请求架构'里的思路,存入store
+- 在新的home组件中,获取数据,简单配置样式即可
+  ```js
+    import useHomeStore from '@/store/modules/home';
+    import { storeToRefs } from 'pinia';
+
+    // 获取数据
+    const homestore = useHomeStore()
+    homestore.fetchCategories()
+    const { categories } = storeToRefs(homestore)
+  ```
+### 客房列表搭建
+- 新组件: home-content
+  [![pE4pydO.png](https://s21.ax1x.com/2025/04/18/pE4pydO.png)](https://imgse.com/i/pE4pydO)
+- 依据discoveryContentType来确定客房的html和css布局,有2种样式,==,封装进公共组件/components/home==
+  ```html
+    <div class="home-content">
+    <div class="title">热门精选</div>
+    <!-- 客房列表,分两种类型 -->
+    <div class="list">
+      <template v-for="(item,index) in houseList" :key="item.data.houseId">
+        <!-- 样式不同显示不同的组件 -->
+        <HouseItemV9 v-if="item.discoveryContentType === 9" :item-data="item.data"/>
+        <HouseItemV3 v-if="item.discoveryContentType === 3" :item-data="item.data"/>
+      </template>
+    </div>
+  </div>
+  ```
+  > 具体两个组件就不展示了,获取到父传子的数据后,配置html和css即可
+  > 部分数据需要`?.`,有的item数据中可能没有一些通用的属性
+- params传参,多页page,==客房有多页数据,每次请求新的一页==
+- ==注意,请求新的数据要追加,不要覆盖原数据==
+- store中负责请求数据,直接在里面操作即可
+  ```js
+    // state
+    currentPage: 1 // 请求页面
+    // actions
+    async fetchHouseList(){
+      const res = await getHouseList(this.currentPage)
+      // 不要覆盖之前的数据,追加新数据push
+      this.houseList.push(...res.data)
+      this.currentPage ++
+    }
+  ```
+  ```js
+    export function getHouseList(currentPage){
+      return hyRequest.get({
+        url: '/home/houselist',
+        // 接受page参数
+        params:{
+          page: currentPage
+        }
+      })
+    }
+  ```
+### window滚动与加载(*)
+- 复习css的三个变量的关系,如下
+  [![pE4pseK.png](https://s21.ax1x.com/2025/04/18/pE4pseK.png)](https://imgse.com/i/pE4pseK)
+- ==把滚动封装进hooks中,/hooks/useScroll.js==
+- ==在hooks中,当滚动到底部时,需要网络请求新数据,有2个方法解决==
+  >
+- ==方法1:传递函数==
+- 毕竟请求网络数据的函数不能写死
+  ```js
+    import { onMounted, onUnmounted, ref } from 'vue';
+
+    // 方法1: 通过回调函数
+    export default function useScroll(cb){
+      const scrollListenerHandler = () => {
+        const clientHeight = document.documentElement.clientHeight
+        const scrollTop = document.documentElement.scrollTop
+        const scrollHight = document.documentElement.scrollHeight
+
+        // 防止小数点精确问题(1~2px即可)
+        if(scrollTop + clientHeight + 2 >= scrollHight){
+          // 执行外边传进来的函数,比如请求houseList的函数
+          if(cb) cb()
+        }
+      }
+
+      onMounted(() => {
+        window.addEventListener('scroll',scrollListenerHandler)
+      })
+
+      onUnmounted(()=>{
+        window.removeEventListener('scroll',scrollListenerHandler)
+      })
+    }
+  ```
+- home.vue
+  ```js
+    import useScroll from '@/hooks/useScroll';
+    // 方法1: 回调函数不易控制
+    useScroll(homestore.fetchHouseList)
+  ```
+  > 传递回调函数不好管理,而且操作起来不一定只需要一个回调函数,所以推荐方法2,变量方法,变量更好操作
+- ==方法2: 变量方法==
+  ```js
+    // 2.方法2: 变量返回
+    export default function useScroll(){
+      const isReachBottom = ref(false) // 是否到达底部
+      const scrollListenerHandler = () => {
+        const clientHeight = document.documentElement.clientHeight
+        const scrollTop = document.documentElement.scrollTop
+        const scrollHight = document.documentElement.scrollHeight
+
+        // 防止小数点精确问题(1~2px即可)
+        if(scrollTop + clientHeight + 2 >= scrollHight){
+          isReachBottom.value = true
+        }
+      }
+
+      // 在页面创建与销毁时,创建和销毁对应的监听事件,window监听事件不销毁,是会一直保留的!
+      onMounted(() => {
+        window.addEventListener('scroll',scrollListenerHandler)
+      })
+
+      onUnmounted(()=>{
+        window.removeEventListener('scroll',scrollListenerHandler)
+      })
+
+      return {isReachBottom}
+    }
+  ```
+- home.vue
+  ```js
+    // hooks
+    import useScroll from '@/hooks/useScroll';
+    // store
+    import useHomeStore from '@/store/modules/home';
+    const homestore = useHomeStore()
+
+    // 方法2: 推荐变量方法
+    const { isReachBottom } = useScroll()
+    // 监听isReachBottom的变化,在没有immediate属性下,默认第一次不执行,之后只要变量变化,就执行回调
+    // 新变量值作为参数传递给回调函数,当到达底部时,newValue=true,请求新的数据
+    watch(isReachBottom, (newValue) => {
+      if (newValue) {
+        // 更严谨,在确定请求数据成功后在设置'未到达底部'
+        homestore.fetchHouseList().then(() => {
+          // 获取的isReachBottom是ref类型
+          isReachBottom.value = false
+        })
+      }
+    })
+  ```
+  > 后续优化,比如节流函数,控制监听频率,针对keep-alive的情况,需要新的window监听
