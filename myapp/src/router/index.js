@@ -36,6 +36,13 @@ const router = createRouter({
       meta:{
         hideTabbar: true
       }
+    },
+    {
+      path: '/detail/:id', // 动态路由获取houseId
+      component: ()=>import('@/views/detail/detail.vue'),
+      meta:{
+        hideTabbar:true
+      }
     }
   ]
 })

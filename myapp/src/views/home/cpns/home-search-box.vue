@@ -14,14 +14,14 @@
       <div class="start">
         <div class="date">
           <span class="tip">入住</span>
-          <span class="time">{{ startDate }}</span>
+          <span class="time">{{ startDateStr }}</span>
         </div>
         <div class="stay">共{{ stayCount }}晚</div>
       </div>
       <div class="end">
         <div class="date">
           <span class="tip">离店</span>
-          <span class="time">{{ endDate }}</span>
+          <span class="time">{{ endDateStr }}</span>
         </div>
       </div>
     </div>
@@ -54,12 +54,13 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia';
 import { formatMonthDay, getDiffDays } from '@/utils/format.date.js'
 import useCityStore from '@/store/modules/city';
 import useHomeStore from '@/store/modules/home';
+import useMainStore from '@/store/modules/main';
 
 
 // 跳转到位置/城市页面 
@@ -92,27 +93,26 @@ const getLocation = () => {
 const cityStore = useCityStore()
 const { currentCity } = storeToRefs(cityStore)
 
-// 日期自动格式化
-const nowDate = new Date()
-// 新的天数这样加,不要直接new Date()+1,防止出现'7月32日'
-const newDate = new Date()
-newDate.setDate(nowDate.getDate() + 1) // 不返回新的值,直接改原对象
-// 开始日期,结束日期,停留日期
-const startDate = ref(formatMonthDay(new Date()))
-const endDate = ref(formatMonthDay(newDate))
-const stayCount = ref(1)
-stayCount.value = getDiffDays(nowDate, newDate) // 可有可无,默认就是1天
+// 获取store中的开始日期,结束日期
+const mainstore = useMainStore()
+const {startDate,endDate} = storeToRefs(mainstore)
+// 计算属性,响应式依赖内部startDate和endDate值的变化 (ref数据记得.value和修改html中变量)
+const startDateStr = computed(() => formatMonthDay(startDate.value))
+const endDateStr = computed(() => formatMonthDay(endDate.value))
+const stayCount = ref(1) // 停留时间
+stayCount.value = getDiffDays(startDate.value, endDate.value) // 可有可无,默认就是1天
 
 // 日历
 const isCalendarShow = ref(false)
 // 组件自带,确定按钮事件处理函数
 const onConfirm = (value) => { // 日历区间默认参数value->数组[开始,结束]
-  // console.log(value) 
-  // 格式化入住,离开事件
-  startDate.value = formatMonthDay(value[0])
-  endDate.value = formatMonthDay(value[1])
+  const selectStartDate = value[0]
+  const selectEndDate = value[1]
+  // 保存进mainStore中的日期属性
+  mainstore.startDate = selectStartDate
+  mainstore.endDate = selectEndDate
   // 计算天数差值
-  stayCount.value = getDiffDays(value[0], value[1])
+  stayCount.value = getDiffDays(selectStartDate, selectEndDate)
   // 关闭日历
   isCalendarShow.value = false
 }

@@ -260,6 +260,40 @@
 
     </style>
   ```
+### 组件vant的Tabbar(*)
+- 项目中用的这个方法
+- 同时改进小bug,即输入路由对应tabbar高亮显示
+- 根据文档使用route属性(路由模式),再单独处理图标高亮的问题
+  ```html
+    <div class="tabbar">
+        <!-- v-model负责确定currentIndex的值,点击的索引 -->
+        <!-- 开启路由模式,tabbar根据路由url自动选择tabItem -->
+        <van-tabbar v-model="currentIndex" active-color="#ff9527" route>
+        <template v-for="(item, index) in tabbarData" :key="item.path">
+          <van-tabbar-item :to="item.path">
+            <span>{{ item.text }}</span>
+            <template #icon>
+              <img v-if="currentIndex !== index" class="img" :src="getImgURL(item.image)" alt="">
+              <img v-else class="img" :src="getImgURL(item.imageActive)" alt="">
+            </template>
+          </van-tabbar-item>
+        </template>
+      </van-tabbar>
+    </div>
+  ```
+  ```js
+    // 监听路由改变,改变currentIndex值,显示对应图标高亮
+    const route = useRoute()
+    const currentIndex = ref(0)
+    watch(route,(newRoute) => {
+      const index = tabbarData.findIndex(item => item.path === newRoute.path)
+      if(index === -1) return // 找不到就停止设置
+      currentIndex.value = index
+    })
+  ```
+  
+  > 原有的路由模式只能处理字体选中,图标的高亮是依据currentIndex来的,受组件局限,只能监听路由单独处理
+
 ### 页面内容防遮挡(*)
 - Tabbar菜单栏fixed固定在底部,当页面内容超出100vh时,Tabbar页面会遮挡一部分页面内容,如下操作即可
   ```html
@@ -913,6 +947,7 @@
   ```
 ### window滚动与加载(*)
 - 复习css的三个变量的关系,如下
+- ==蓝色是整体页面,橙色是浏览器的可视化窗口==
   [![pE4pseK.png](https://s21.ax1x.com/2025/04/18/pE4pseK.png)](https://imgse.com/i/pE4pseK)
 - ==把滚动封装进hooks中,/hooks/useScroll.js==
 - ==在hooks中,当滚动到底部时,需要网络请求新数据,有2个方法解决==
@@ -1003,3 +1038,449 @@
     })
   ```
   > 后续优化,比如节流函数,控制监听频率,针对keep-alive的情况,需要新的window监听
+### 优化滚动hooks(*)
+- 更多的响应式返回(ref),新增search-bar组件
+- 组件的的内部代码略,显示样式如下,封装进组件components/search-bar
+  [![pE47kmd.png](https://s21.ax1x.com/2025/04/20/pE47kmd.png)](https://imgse.com/i/pE47kmd)
+- ==1.之前的滚动hooks只返回是否到达底部,而scrollTop等3个参数最好也返回出去,用不用看用户,这样更加灵活的==
+- ==2.节流函数,降低触发滚动监听的频率==
+- ==业务中不用手写,用第三方库underscore,`npm i underscore`==
+  ```js
+    import { onMounted, onUnmounted, ref } from 'vue';
+    // 1.全部引入,使用对应的方法 _.XXX
+    // import _ from 'underscore'
+    // 2.单独对方法引入
+    import { throttle } from 'underscore';
+    // 最终改进
+    export default function useScroll(){
+      const isReachBottom = ref(false) // 是否到达底部
+      // 更好的响应式,外界可以自由获取更多数据
+      const clientHeight = ref(0)
+      const scrollTop = ref(0)
+      const scrollHight = ref(0)
+      // 节流函数throttle
+      const scrollListenerHandler = throttle(() => {
+        clientHeight.value = document.documentElement.clientHeight
+        scrollTop.value = document.documentElement.scrollTop
+        scrollHight.value = document.documentElement.scrollHeight
+        // 防止小数点精确问题(1~2px即可)
+        if(scrollTop.value + clientHeight.value + 2 >= scrollHight.value){
+          isReachBottom.value = true
+        }
+      },100) // 100ms
+
+      // 在页面创建与销毁时,创建和销毁对应的监听事件,window监听事件不销毁,是会一直保留的!
+      onMounted(() => {
+        window.addEventListener('scroll',scrollListenerHandler)
+      })
+
+      onUnmounted(()=>{
+        window.removeEventListener('scroll',scrollListenerHandler)
+      })
+
+      return {isReachBottom,clientHeight,scrollHight,scrollTop}
+    }
+  ```
+  > 1.把clientHeight,scrollTop,scrollHight返回出去,使用定义为ref,具有响应式
+  > 2.节流函数使用第三方库
+- 主页home.vue动态显示搜索栏
+  ```html
+    <!-- 搜索栏 -->
+    <div class="search-bar" v-if="isSearchShow">
+      <searchBar/>
+    </div>
+  ```
+  ```js
+    // 新增返回scrollTop
+    const { isReachBottom,scrollTop } = useScroll()
+    // 是否显示搜索栏
+    const isSearchShow = computed(() => scrollTop.value >= 350)
+  ```
+### watch与computed(*)
+- 同样useScroll获取的值,监听响应式使用watch和computed两种方法处理
+  ```js
+    watch(isReachBottom, (newValue) => {
+      if (newValue) {
+        // 更严谨,在确定请求数据成功后在设置'未到达底部'
+        homestore.fetchHouseList().then(() => {
+          // 获取的isReachBottom是ref类型
+          isReachBottom.value = false
+        })
+      }
+    })
+
+    // 是否显示搜索栏
+    const isSearchShow = computed(() => scrollTop.value >= 350)
+  ```
+  > watch可以更好的处理js逻辑,而computed只有一行代码;如果要求最终只返回一个简单的值,可以用计算属性,如果中间要求有一些js逻辑(比如给XX赋值等),就用watch,计算属性只处理简单的运算,返回简单的值;watch可以处理复杂的js逻辑
+### MainStore(*)
+- ==存储公用且常用的数据,比如token,isLoading以及住酒店的开始结束日期(startDate,endDate)==
+- ==任务==: 
+  - 处理home-search-box.vue中startDate/endDate以及部分代码重构
+  - 搜索组件search-bar同时获取到日期
+- main.js(/store/modules)
+  ```js
+    import { defineStore } from "pinia";
+
+    // 日期自动格式化
+    const startDate = new Date()
+    // 新的天数这样加,不要直接new Date()+1,防止出现'7月32日'
+    const endDate = new Date()
+    endDate.setDate(startDate.getDate() + 1) // 不返回新的值,直接改原对象
+
+    const useMainStore = defineStore('main',{
+      // mainstore存放公用且常用的值
+      state: ()=>({
+        startDate: startDate,
+        endDate: endDate
+      })
+    })
+
+    export default useMainStore
+  ```
+- 重构代码
+  ```js
+    import useMainStore from '@/store/modules/main';
+
+    // 获取store中的开始日期,结束日期
+    const mainstore = useMainStore()
+    const {startDate,endDate} = storeToRefs(mainstore)
+    // 计算属性,响应式依赖内部startDate和endDate值的变化 (ref数据记得.value和修改html中变量)
+    const startDateStr = computed(() => formatMonthDay(startDate.value))
+    const endDateStr = computed(() => formatMonthDay(endDate.value))
+    const stayCount = ref(1) // 停留时间
+    stayCount.value = getDiffDays(startDate.value, endDate.value) // 可有可无,默认就是1天
+  ```
+- 搜索组件使用日期startDate,endDate
+  ```js
+    import useMainStore from '@/store/modules/main';
+    import { formatMonthDay } from '@/utils/format.date';
+
+    // 获取mainstore中的开始日期,结束日期
+    const mainstore = useMainStore()
+    const {startDate,endDate} = storeToRefs(mainstore)
+    const startDateStr = computed(() => formatMonthDay(startDate.value,'MM.DD'))
+    const endDateStr = computed(() => formatMonthDay(endDate.value,'MM.DD'))
+  ```
+- ==最后,修改下工具函数formatMonthDay==
+  ```js
+    // 格式化月日
+    export function formatMonthDay(date,formatStr = 'MM月DD日'){
+      return dayjs(date).format(formatStr)
+    }
+  ```
+  > 用户可以自己传入想要的日期格式
+### isLoading动画(*)
+- **给axios请求数据等待时添加过场动画**
+- 内容: isLoading大致的页面配置和mainstore中参数配置
+- ==isLoading页面是加载动画蒙版,有灰色背景和居中的加载动画gif==
+  ```html
+    <!-- 这样写也有响应式,使用的少的变量这样写更省事 -->
+    <div class="loading" v-if="mainstore.isLoading" @click="loadingClick">
+      <div class="bg">
+        <img src="/img/home/full-screen-loading.gif" alt="">
+      </div>
+    </div>
+  ```
+- ==css公式(部分),有空可以看看codewhy的css课==
+  ```css
+    .loading {
+      /* 占满全屏 */
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      right: 0;
+      left: 0;
+      z-index: 999;
+      /* 内容居中的flex */
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      /* 灰色蒙版 */
+      background-color: rgba(0, 0, 0, .3);
+    }
+  ```
+- 是否显示加载动画由isLoading变量负责,之前讲过,这种公用且常用的变量放入mainstore,具体代码略,默认值false(不显示)
+  ```js
+    import useMainStore from '@/store/modules/main';
+
+    const mainstore = useMainStore()
+    const loadingClick = () => {
+      mainstore.isLoading = false
+    }
+  ```
+  > 引入mainstore中的isLoading变量,结合v-if决定是否显示加载动画
+  > 事件loadingClick,只要点击加载动画的背景(蒙版),即隐藏加载动画
+- ==加载动画的组件最终部署到App.vue中,保证每个页面都有==
+  ```html
+    <template>
+      <div>
+        <div class="page-content">
+          <RouterView></RouterView>
+        </div>
+        <TabBar v-if="!route.meta.hideTabbar"></TabBar>
+        <!-- 加载动画组件 -->
+        <Loading/>
+      </div>
+    </template>
+  ```
+- axios拦截器,在service/request/index.js中
+  ```js
+    class HYRequest {
+      constructor(baseURL, timeout=10000) {
+        this.instance = axios.create({
+          baseURL,
+          timeout
+        })
+
+        // 拦截器是针对axios实例写的,axios.interceptors.XXX.use()
+        // 1.发送前,拦截器都是两个回调,成功的和失败的回调函数
+        this.instance.interceptors.request.use((config)=>{
+          mainstore.isLoading = true // 发送成功
+          return config
+        },err => {
+          return err
+        })
+        // 2.响应后(无论请求成功或失败,都需要隐藏掉isLoading)
+        this.instance.interceptors.response.use((res)=>{
+          mainstore.isLoading = false // 接受成功
+          return res
+        },err => {
+          mainstore.isLoading = false // 接受失败
+          return err
+        })
+      }
+
+      // .....
+    }
+  ```
+  > 每次使用HYRequest类,都是new HYRequest(),根据代码,每次都创建一个新的axios实例,而axios拦截器interceptors是挂载到axios实例上面的,所以挂载到当前创建的axios实例即`this.instance.interceptors.use()`
+
+### 属性透传(*)
+- 之前vant组件直接绑定事件提到过,这里根据自己写的house-item-v3/9详细说明,组件绑定的事件或className到底绑定到哪里,如下图
+  [![pE47iOH.png](https://s21.ax1x.com/2025/04/20/pE47iOH.png)](https://imgse.com/i/pE47iOH)
+  > ==详细笔记可见vue进阶的属性透传,默认根标签,可以通过$attr指定新的透传标签,同时可以设置属性禁止默认地向根标签透传行为==
+- 绑定好事件后,传递houseId(detail.vue的params传参)
+  ```html
+    <!-- home/cpns/home-content.vue -->
+    <div class="list">
+      <template v-for="(item, index) in houseList" :key="item.data.houseId">
+        <HouseItemV9 v-if="item.discoveryContentType === 9" :item-data="item.data" @click="itemClick(item.data)"/>
+        <HouseItemV3 v-if="item.discoveryContentType === 3" :item-data="item.data" @click="itemClick(item.data)"/>
+      </template>
+    </div> 
+  ```
+  ```js
+    const router = useRouter()
+    const itemClick = (item) => {
+      router.push('/detail/' + item.houseId)
+    }
+  ```
+### detail详情页搭建
+- 简单搭建+传递params参数
+  ```js
+    // router/index.js
+   {
+      path: '/detail/:id', // 动态路由获取houseId
+      component: ()=>import('@/views/detail/detail.vue'),
+      meta:{
+        hideTabbar:true
+      }
+    }
+  ```
+- detail.vue
+  ```html
+    <template>
+      <div>detail: {{ $route.params.id }}</div>
+    </template>
+
+    <script setup>
+    import { useRoute } from 'vue-router';
+
+    const route = useRoute()
+    const houseId = route.params.id
+    </script>
+  ```
+  > ==html和js中获取params参数的2种方式==
+### 详情页开发(页内管理)(*)
+- 数据复杂的一个页面,数据很多很杂,分模块一点点做,同时把数据分割
+- ==**之前一直用的store管理,detail页面我们用页内管理,两种思路都学习下**==
+- service/modules配置好请求房间详情信息的网络请求函数
+  ```js
+    import hyRequest from '../request'
+
+    export function getDetailInfos(houseId){
+      return hyRequest.get({
+        url:'/detail/infos',
+        params: {
+          houseId
+        }
+      })
+    }
+  ```
+- 在detail.vue页面中请求数据并保存
+  ```js
+    // 从params中获取房屋的id
+    const route = useRoute()
+    const houseId = route.params.id
+
+    // 房屋详情的网络请求
+    const detailInfos = ref({})
+    const mainPart = computed(() => detailInfos.value.mainPart) // 复杂数据拆解
+    getDetailInfos(houseId).then(res => detailInfos.value = res.data)
+  ```
+### 轮播组件(父传子)(*)
+- 使用vant组件的轮播图,封装进组件components
+- ==**没有store,组件获取信息就需要父传子了**==
+- ==网络请求有延时,通过v-if解决==
+  ```html
+    <!-- 轮播,mainPart初始为undefined,网络请求是异步 -->
+    <div v-if="mainPart">
+      <detailSwipe :swipe-data="mainPart.topModule.housePicture.housePics"/>
+    </div>
+  ```
+  > 单独的`?.`太繁琐了,内部的数据都用mainPart,所以外层包裹一个div,使用v-if处理它即可
+  ```js
+    // 房屋详情的网络请求
+    const detailInfos = ref({})
+    // 复杂数据拆解
+    const mainPart = computed(() => detailInfos.value.mainPart)
+    getDetailInfos(houseId).then(res => detailInfos.value = res.data)
+  ```
+- ==子组件接受父组件的值==
+  ```js
+    // cpns/detail-swipe.vue
+    defineProps({
+      swipeData: {
+        type: Array,
+        default: () => []
+      }
+    })
+  ```
+### 轮播+插槽(*)
+- 基础的轮播图搭建 + 自定义轮播样式
+- ==自定义轮播的内容,插槽内部自定义自己想要的内容==
+- ==作用域插槽,理解插槽的含义==
+  ```html
+  <div class="swipe">
+    <van-swipe class="swipe-list" :autoplay="3000" indicator-color="white" lazy-render>
+      <!-- 基础的轮播图item -->
+      <template v-for="(item, index) in swipeData" :key="index">
+        <van-swipe-item class="item">
+          <img :src="item.url" alt="">
+        </van-swipe-item>
+      </template>
+      <!-- 自定义指示器,作用域插槽 + 具名插槽(indicator) -->
+      <!-- 内部数据: active(当前item索引) total(总数) -->
+      <template #indicator="{ active, total }">
+        <div class="indicator">{{ active + 1 }}/{{ total }}</div>
+      </template>
+    </van-swipe>
+  </div>
+  ```
+  > css略,绝对定位到轮播区域右下角了
+### 轮播数据处理(*)
+- 轮播图太多,需要对数据进行分类
+- ==**学习数据分类的思路,是一种算法思维,是一种处理数据的数据结构**==
+  [![pE4OWmF.png](https://s21.ax1x.com/2025/04/20/pE4OWmF.png)](https://imgse.com/i/pE4OWmF)
+  ```js
+    展示数据 title: index+1/value.length
+      显示  卧室: 2 / 6
+    // 分类后放入对象,以key:value形式展示,分类过程中,相同的key会自动合并
+    {
+      // 以enumPictureCategory分类,相同的合并
+      // 之后轮播图直接遍历其数组即可
+      "2": [item1,item2,...,itemX]
+      "4": [itema,itemb,...,itemY]
+      ...
+    }
+  ```
+- ==分类方法有2个==
+- ==1.容易理解==
+  ```js
+    // 处理数据---分类
+    const swipeGroup = {}
+    // 思路1: 2次循环,第一次确定有哪些类(例如: "2": []),第二次,往对应类的数组里面存放item
+    for(const item of props.swipeData){
+      swipeGroup[item.enumPictureCategory] = [] // 相同的key会合并
+    }
+    for(const item of props.swipeData){
+      const valueArray = swipeGroup[item.enumPictureCategory]
+      valueArray.push(item)
+    }
+  ```
+- ==2.优化的==
+  ```js
+    const swipeGroup = {}
+    for(const item of props.swipeData){
+      // 因为swipeGroup是空对象,第一次获取为undefined
+      let valueArray = swipeGroup[item.enumPictureCategory] 
+      if(!valueArray){
+        valueArray = []
+        swipeGroup[item.enumPictureCategory] = valueArray // 把数组赋值回去
+      }  
+      valueArray.push(item)
+    }
+  ```
+- 分类后的数据展示
+  [![pE4Ofw4.png](https://s21.ax1x.com/2025/04/20/pE4Ofw4.png)](https://imgse.com/i/pE4Ofw4)
+  > 总结果swipeGroup是对象,分类以key:value形式划分,key为类,value为数据,数组形式方便后面遍历轮播图使用
+- ==要求展示下面的轮播格式==
+  - 删除不必要的字符
+  - 轮播对应类的图片时,右下角有特殊样式
+  - 轮播类中有数字提示
+  [![pE4OhTJ.png](https://s21.ax1x.com/2025/04/20/pE4OhTJ.png)](https://imgse.com/i/pE4OhTJ)
+- ==1.删除字符,2个方法==
+- 1.1简单的
+  ```js
+    const getName = (name) => {
+      // 方法1: 替换
+      return name.replace("【","").replace("】","").replace("：","")
+    }
+  ```
+- 1.2复杂的
+  ```js
+    const nameReg = /【(.*?)】/i
+    const getName = (name) => {
+      // 方法2: 正则表达式
+      const result = nameReg.exec(name)
+      return result[1]
+    }
+  ```
+- ==2.特殊样式展示(css略),item==
+  ```html
+    <template #indicator="{ active, total }">
+      <div class="indicator">
+        <!-- 循环对象swipeGroup -->
+        <template v-for="(value,key,index) in swipeGroup" :key="key">
+          <!-- 被选中的轮播图类可以获取active的css样式,key是字符串,数据是Num -->
+    item-> <span class="item" :class="{active: swipeData[active]?.enumPictureCategory == key}">
+            <span class="text">{{ getName(value[0].title) }}</span>
+            <!-- 被选中的类才会显示数量 -->
+   count->  <span class="count" v-if="swipeData[active]?.enumPictureCategory == key">
+              <!-- 获取当前组里的索引,而不是所有数据的索引 -->
+              {{ getCategoryIndex(swipeData[active]) }} / {{ value.length }}
+            </span>
+          </span>
+        </template>
+      </div>
+  </template>
+  ```
+  > 在轮播html中,使用动态class绑定active,当它后面的表达式为true时,则添加新的className(active)
+  代码解析: `swipeData[active]?.enumPictureCategory == key`
+  ==swipeData是总体数据housePics(对象),active是单项item索引,通过获取到单项数据item的enumPictureCategory与分类数组的key值作比较,当相等时则证明当前图片属于这个类,添加样式==
+  [![pE4OWmF.png](https://s21.ax1x.com/2025/04/20/pE4OWmF.png)](https://imgse.com/i/pE4OWmF)
+
+- ==3.展示数量count==
+- 同理只有被选中的类才可以展示数量,所以使用v-if隐藏掉未选中的类的数字显示
+- count的索引的难点是当前图片在所在类的索引,而不是相对于全部数据的索引active
+- ==参数是当前图片的item数据==
+  ```js
+    // 获取数据在当前组的索引,参数是这个数据单项
+    const getCategoryIndex = (item) => {
+      // 找到所在类的数组
+      const valueArray = swipeGroup[item.enumPictureCategory] 
+      // 在对应类中,找到和这个类相同的数据单项,返回它的索引 记得+1
+      return valueArray.findIndex(data => data === item) + 1
+    }
+  ```
